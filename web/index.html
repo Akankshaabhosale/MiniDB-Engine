@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniDB – live look inside an in-memory database</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1a1d23;--mut:#667085;--line:#e3e6eb;--acc:#2563eb;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--chip:#eef2ff;--code:#0f172a;--codeink:#e2e8f0}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#171b22;--ink:#e6e9ef;--mut:#8b94a5;--line:#2a303b;--acc:#60a5fa;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--chip:#1e2a44;--code:#0a0d12;--codeink:#cbd5e1}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.mono,code,input,.chip,.log,.wal,#term{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+header{padding:18px 22px 6px;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:baseline}
+h1{margin:0;font-size:20px}header p{margin:0;color:var(--mut);flex:1 1 380px}
+#status{font-size:12px;padding:2px 9px;border-radius:99px;border:1px solid var(--line);color:var(--mut)}#status.on{color:var(--ok);border-color:var(--ok)}
+main{padding:10px 22px 30px;display:grid;gap:14px;grid-template-columns:minmax(300px,420px) 1fr}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.card h2{margin:0 0 8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+#pipe{grid-column:1/-1;display:flex;align-items:stretch;gap:6px;flex-wrap:wrap}
+.st{flex:1 1 150px;border:1px solid var(--line);border-radius:10px;padding:8px 10px;transition:.25s;min-height:64px}
+.st b{display:block;font-size:13px}.st small{color:var(--mut);display:block;font-size:11px;word-break:break-all}.st span.n{font-size:12px;display:block;margin-top:2px;word-break:break-all}
+.st.lit{border-color:var(--acc);background:var(--chip);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 25%,transparent)}.st.warn.lit{border-color:var(--warn);background:color-mix(in srgb,var(--warn) 18%,transparent)}
+.arrow{align-self:center;color:var(--mut)}
+#term{background:var(--code);color:var(--codeink);border-radius:8px;height:230px;overflow:auto;padding:8px 10px;font-size:12.5px;white-space:pre-wrap;word-break:break-all}
+#term .q{color:#93c5fd}#term .e{color:#fca5a5}#term .r{color:#86efac}
+#cmd{width:100%;margin-top:8px;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:13px}
+.btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+button{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 10px;border-radius:8px;cursor:pointer;font-size:12.5px}button:hover{border-color:var(--acc)}button.danger{border-color:var(--bad);color:var(--bad)}
+.hint{color:var(--mut);font-size:12px;margin-top:8px}
+#shards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}
+.shard{border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-height:150px}
+.sh-head{display:flex;justify-content:space-between;font-size:13px}.meter{height:5px;background:var(--line);border-radius:9px;margin:6px 0 8px;overflow:hidden}.meter i{display:block;height:100%;background:var(--acc);transition:width .3s}
+.lru{display:flex;flex-direction:column;gap:4px}.lbl{font-size:10.5px;color:var(--mut)}
+.chip{background:var(--chip);border-radius:7px;padding:4px 8px;font-size:12px;position:relative;overflow:hidden;transition:.3s}
+.chip b{margin-right:6px}.chip em{color:var(--mut);font-style:normal}.chip.victim{outline:1px dashed var(--warn)}.chip.flash{animation:fl 1.1s}
+@keyframes fl{0%{background:var(--acc);color:#fff}100%{}}
+.ttl{display:block;height:3px;background:var(--line);margin-top:3px;border-radius:3px}.ttl i{display:block;height:100%;background:var(--warn);width:100%}
+.bk{margin-top:8px;font-size:11px;color:var(--mut);word-break:break-all}.empty{color:var(--mut);font-size:12px;padding:10px 0}
+#bottom{grid-column:1/-1;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.wal,.log{background:var(--code);color:var(--codeink);border-radius:8px;height:200px;overflow:auto;padding:8px 10px;font-size:11.5px}
+.wal div,.log div{white-space:pre-wrap;word-break:break-all}.log .t{color:#93c5fd}.log .w{color:#fbbf24}.log .g{color:#86efac}.log .r{color:#fca5a5}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}.stats div{font-size:12px;color:var(--mut)}.stats b{display:block;font-size:18px;color:var(--ink)}
+#banner{display:none;position:fixed;inset:auto 0 18px 0;margin:auto;width:min(560px,92vw);background:var(--bad);color:#fff;padding:12px 16px;border-radius:12px;z-index:9;text-align:center;box-shadow:0 8px 30px #0006}
+#banner.rec{background:var(--warn)}#banner.ok{background:var(--ok)}
+details{grid-column:1/-1}summary{cursor:pointer;color:var(--mut)}details p,details li{color:var(--mut);margin:4px 0}
+@media(max-width:860px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>MiniDB</h1><span id="status">connecting…</span>
+  <p>A sharded in-memory database written in C++. Every command you run goes to the real engine – watch it travel through the pipeline below.</p>
+</header>
+<main>
+  <section class="card" id="pipe">
+    <div class="st" id="st-client"><b>1 · Client</b><small>command</small><span class="n">idle</span></div><span class="arrow">→</span>
+    <div class="st" id="st-router"><b>2 · Router</b><small>hash(key) % shards</small><span class="n">idle</span></div><span class="arrow">→</span>
+    <div class="st" id="st-wal"><b>3 · Write-ahead log</b><small>logged before applying</small><span class="n">idle</span></div><span class="arrow">→</span>
+    <div class="st" id="st-table"><b>4 · Hash table</b><small>bucket + chaining</small><span class="n">idle</span></div><span class="arrow">→</span>
+    <div class="st" id="st-lru"><b>5 · LRU list</b><small>recent first, evict from tail</small><span class="n">idle</span></div>
+  </section>
+
+  <section class="card">
+    <h2>Try it</h2>
+    <div id="term"></div>
+    <input id="cmd" placeholder='SET user:1 "Ada Lovelace" 20   (press Enter)' autocomplete="off" spellcheck="false">
+    <div class="btns">
+      <button id="b-sample">Load sample data</button>
+      <button id="b-fill">Fill past capacity (see evictions)</button>
+      <button id="b-snap">SNAPSHOT</button>
+      <button id="b-crash" class="danger">💥 Crash &amp; recover</button>
+      <button id="b-flush">FLUSH</button>
+    </div>
+    <div class="hint">Commands: <code>SET key value [ttl_s]</code> · <code>GET key</code> · <code>DEL key</code> · <code>TTL key</code> · <code>SNAPSHOT</code> · <code>INFO</code>. This demo is shared – other visitors see your data.</div>
+  </section>
+
+  <section class="card"><h2>Shards (each has its own lock, LRU list and TTL cleaner thread)</h2><div id="shards"></div></section>
+
+  <div id="bottom">
+    <section class="card"><h2>Write-ahead log (wal.log)</h2><div class="wal" id="wal"></div></section>
+    <section class="card"><h2>Engine event stream</h2><div class="log" id="log"></div></section>
+    <section class="card"><h2>Stats</h2><div class="stats" id="stats"></div></section>
+  </div>
+
+  <details class="card"><summary>What am I looking at?</summary>
+    <ul>
+      <li><b>Sharding:</b> the key is hashed (FNV-1a) to pick one of the shards, so threads working on different shards never block each other.</li>
+      <li><b>Hash table:</b> each shard is a 101-bucket table using chaining; the bucket numbers shown are real.</li>
+      <li><b>LRU:</b> most recently used key is on top. When a shard is full, the bottom key (dashed outline) is evicted. Capacity is deliberately tiny here.</li>
+      <li><b>TTL:</b> expired keys are removed lazily on access and by a background thread (orange bars).</li>
+      <li><b>Durability:</b> every write is appended to the WAL <i>before</i> memory changes. <b>Crash &amp; recover</b> throws away all memory and rebuilds it from <code>snapshot.db</code> + the WAL.</li>
+    </ul></details>
+</main>
+<div id="banner"></div>
+
+<script>
+const API=new URLSearchParams(location.search).get('api')||'';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let state=null,fetchedAt=0,recovering=false,needRefresh=false,queue=[],hot=new Set(),ttlTotal={};
+
+function term(txt,cls){const t=$('term'),d=document.createElement('div');d.className=cls||'';d.textContent=txt;t.appendChild(d);t.scrollTop=t.scrollHeight}
+async function send(cmd){
+  term('> '+cmd,'q');
+  try{const r=await fetch(API+'/api/cmd',{method:'POST',body:cmd});const j=await r.json();term(j.reply,j.ok?'r':'e')}
+  catch(e){term('network error','e')}
+}
+function flash(id,note,warn){const el=$('st-'+id);el.classList.toggle('warn',!!warn);el.classList.add('lit');el.querySelector('.n').textContent=note;
+  clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('lit'),900)}
+function log(cls,txt){const l=$('log'),d=document.createElement('div');d.innerHTML='<span class="'+cls+'">'+esc(txt)+'</span>';l.appendChild(d);
+  while(l.children.length>200)l.removeChild(l.firstChild);l.scrollTop=l.scrollHeight}
+function walLine(t){const w=$('wal'),d=document.createElement('div');d.textContent=t;w.appendChild(d);while(w.children.length>60)w.removeChild(w.firstChild);w.scrollTop=w.scrollHeight}
+function banner(txt,cls){const b=$('banner');b.className=cls||'';b.textContent=txt;b.style.display='block'}
+
+function play(e){
+  const k=e.key,s=e.shard;
+  switch(e.ev){
+    case'route':flash('client',e.op+' '+k);flash('router','hash('+k+') = '+e.hash+' → shard '+e.shard);log('t','route   '+e.op+' "'+k+'" → shard '+e.shard+', bucket '+e.bucket);break;
+    case'wal':flash('wal','append: '+e.line);walLine(e.line);log('t','wal     '+e.line);break;
+    case'insert':flash('table','new node in bucket '+e.bucket+' (shard '+s+')');flash('lru','"'+k+'" → head ('+e.size+'/'+e.capacity+')');hot.add(s+'|'+k);needRefresh=true;log('g','insert  "'+k+'" shard '+s+' ('+e.size+'/'+e.capacity+')');break;
+    case'update':flash('table','overwrite in bucket '+e.bucket);flash('lru','"'+k+'" moved to head');hot.add(s+'|'+k);needRefresh=true;log('g','update  "'+k+'"');break;
+    case'get':flash('table',(e.hit?'HIT':'MISS')+' in bucket '+e.bucket);if(e.hit){flash('lru','"'+k+'" moved to head');hot.add(s+'|'+k);needRefresh=true}log(e.hit?'g':'w','get     "'+k+'" '+(e.hit?'hit':'miss'));break;
+    case'delete':flash('table','unlinked from bucket '+e.bucket);needRefresh=true;log('w','delete  "'+k+'"');break;
+    case'evict':flash('lru','evicted LRU tail "'+k+'"',true);needRefresh=true;log('w','EVICT   "'+k+'" (shard '+s+' was full)');break;
+    case'expire':flash('table','TTL expired ('+e.how+'): "'+k+'"',true);needRefresh=true;log('w','expire  "'+k+'" ('+e.how+')');break;
+    case'snapshot':log('g','snapshot saved: '+e.keys+' keys');needRefresh=true;break;
+    case'wal_clear':$('wal').innerHTML='';walLine('# WAL truncated');needRefresh=true;break;
+    case'flush':log('w','FLUSH – everything cleared');needRefresh=true;break;
+    case'crash':recovering=true;state=null;renderShards();banner('💥 Engine crashed – all in-memory data lost','');log('r','CRASH   process memory discarded (no snapshot taken)');break;
+    case'recover_start':banner('♻ Recovering… reading snapshot.db','rec');log('w','recover starting');break;
+    case'recover_snapshot':banner('♻ Snapshot loaded: '+e.keys+' keys. Replaying WAL…','rec');log('w','recover snapshot → '+e.keys+' keys');break;
+    case'recover_wal':banner('♻ Replayed '+e.applied+' of '+e.entries+' WAL entries'+(e.skipped?' ('+e.skipped+' damaged skipped)':''),'rec');log('w','recover wal → applied '+e.applied+'/'+e.entries);break;
+    case'recover_done':recovering=false;needRefresh=true;banner('✅ Recovered '+e.keys+' keys in '+e.ms+' ms','ok');log('g','recover done: '+e.keys+' keys in '+e.ms+' ms');setTimeout(()=>{$('banner').style.display='none'},2200);break;
+  }
+}
+setInterval(()=>{
+  let n=queue.length>40?10:1;while(n--&&queue.length)play(queue.shift());   // pacing: one event per tick so a human can follow
+  if(!queue.length&&needRefresh&&!recovering){needRefresh=false;refresh()}
+},110);
+setInterval(()=>{if(!queue.length&&!recovering)refresh()},4000);
+
+async function refresh(){try{const r=await fetch(API+'/api/state');state=await r.json();fetchedAt=Date.now();renderShards();renderStats()}catch(e){}}
+function renderShards(){
+  const box=$('shards');
+  if(!state){box.innerHTML='<div class="empty">engine is down…</div>';return}
+  box.innerHTML=state.shards.map(sh=>{
+    const full=sh.size>=sh.capacity,pct=Math.round(100*sh.size/sh.capacity);
+    const chips=sh.lru.map((x,i)=>{
+      if(x.ttlMs>=0)ttlTotal[sh.id+'|'+x.key]=Math.max(ttlTotal[sh.id+'|'+x.key]||0,x.ttlMs);
+      return '<div class="chip'+(full&&i===sh.lru.length-1?' victim':'')+(hot.has(sh.id+'|'+x.key)?' flash':'')+'"><b>'+esc(x.key)+'</b><em>'+esc(x.value)+'</em>'+
+        (x.ttlMs>=0?'<span class="ttl"><i data-k="'+esc(sh.id+'|'+x.key)+'" data-left="'+x.ttlMs+'"></i></span>':'')+'</div>'}).join('');
+    const bk=sh.buckets.map(b=>'bucket '+b.i+' → '+b.keys.map(esc).join(' → ')).join('<br>');
+    return '<div class="shard"><div class="sh-head"><b>Shard '+sh.id+'</b><span class="mono">'+sh.size+'/'+sh.capacity+'</span></div>'+
+      '<div class="meter"><i style="width:'+pct+'%;'+(full?'background:var(--warn)':'')+'"></i></div>'+
+      (sh.lru.length?'<div class="lbl">most recent ↓ least recent</div><div class="lru">'+chips+'</div><div class="bk">'+bk+'</div>':'<div class="empty">empty</div>')+'</div>'}).join('');
+  hot.clear();
+}
+function renderStats(){
+  const i=state.info,hr=i.gets?Math.round(100*i.hits/i.gets)+'%':'–';
+  const rows=[['keys',i.keys+' / '+i.shards*i.capacityPerShard],['writes',i.sets],['reads',i.gets],['hit rate',hr],['evictions',i.evictions],['TTL expiries',i.expirations],['WAL entries',i.walEntries],['WAL size',i.walBytes+' B'],
+    ['last recovery',i.recovery.ms+' ms'],['uptime',Math.round(i.uptimeMs/1000)+' s']];
+  $('stats').innerHTML=rows.map(r=>'<div>'+r[0]+'<b>'+r[1]+'</b></div>').join('');
+}
+setInterval(()=>{   // animate TTL bars locally between refreshes
+  const dt=Date.now()-fetchedAt;
+  document.querySelectorAll('.ttl i').forEach(el=>{const left=Math.max(0,+el.dataset.left-dt),tot=ttlTotal[el.dataset.k]||1;el.style.width=(100*left/tot)+'%'})
+},200);
+
+function connect(){
+  const es=new EventSource(API+'/api/events');
+  es.onopen=()=>{$('status').textContent='● live';$('status').className='on'};
+  es.onerror=()=>{$('status').textContent='reconnecting…';$('status').className=''};
+  es.onmessage=m=>queue.push(JSON.parse(m.data));
+}
+async function seq(cmds,gap){for(const c of cmds){await send(c);await new Promise(r=>setTimeout(r,gap))}}
+$('cmd').addEventListener('keydown',e=>{
+  const h=($('cmd')._h=$('cmd')._h||[]);
+  if(e.key==='Enter'&&e.target.value.trim()){h.push(e.target.value);$('cmd')._i=h.length;send(e.target.value);e.target.value=''}
+  else if(e.key==='ArrowUp'&&h.length){$('cmd')._i=Math.max(0,($('cmd')._i??h.length)-1);e.target.value=h[$('cmd')._i];e.preventDefault()}
+});
+$('b-sample').onclick=()=>seq(['SET user:1 "Ada Lovelace"','SET user:2 "Alan Turing"','SET session:abc token123 15','SET cart:7 "3 items" 30','GET user:1','GET nope','DEL user:2','TTL session:abc'],550);
+$('b-fill').onclick=()=>seq(Array.from({length:22},(_,i)=>'SET item:'+(i+1)+' v'+(i+1)),280);
+$('b-snap').onclick=()=>send('SNAPSHOT');
+$('b-flush').onclick=()=>send('FLUSH');
+$('b-crash').onclick=async()=>{term('> (simulate crash: discard memory, rebuild from disk)','q');try{const r=await fetch(API+'/api/crash',{method:'POST'});const j=await r.json();term(j.reply,j.ok?'r':'e')}catch(e){term('network error','e')}};
+term('Welcome! Click "Load sample data" or type HELP.','r');connect();refresh();
+fetch(API+'/api/wal').then(r=>r.json()).then(j=>j.lines.forEach(walLine)).catch(()=>{});
+</script>
+</body>
+</html>

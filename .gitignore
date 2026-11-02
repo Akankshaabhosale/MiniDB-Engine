@@ -1,0 +1,11 @@
+build/
+data/
+*.exe
+*.obj
+*.o
+*.log
+snapshot.db*
+test_data_*/
+stress_data/
+CMakeCache.txt
+CMakeFiles/

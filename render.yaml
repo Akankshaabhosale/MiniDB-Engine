@@ -1,0 +1,7 @@
+# One-click deploy on Render: New + > Blueprint > pick this repo.
+services:
+  - type: web
+    name: minidb-demo
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/state
